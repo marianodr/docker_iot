@@ -4,14 +4,16 @@ import os
 import logging
 import aiomqtt
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s: %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s: %(message)s %(task_name)s',
                     level=logging.INFO,
                     datefmt='%d/%m/%Y %H:%M:%S %z')
-
-async def handle_message(topic, payload):
-    # Aquí puedes poner la lógica para manejar el mensaje recibido
-    logging.info(f"Received message in topic '{topic}': {payload.decode()}")
     
+async def process_topic_1(message):
+    logging.info(f'Received message in topic 1: {message.payload}')
+
+async def process_topic_2(message):
+    logging.info(f'Received message in topic 2: {message.payload}')
+
 
 async def counter_publisher(topic, client):
     counter = 0
@@ -59,25 +61,29 @@ async def main():
         await client.subscribe(topic_subscribe_1)
         await client.subscribe(topic_subscribe_2)
 
-        # Use a task group to manage and await all tasks
-        async with asyncio.TaskGroup() as tg: 
-            # Corrutina para manejar mensajes en topic_subscribe_1
+        async with asyncio.TaskGroup() as tg:
+            # Definir las corrutinas para procesar los mensajes de los tópicos
             async def handle_topic_1():
                 async for message in client.messages:
                     if message.topic == topic_subscribe_1:
-                        await handle_message(message.topic, message.payload)
-
-            # Corrutina para manejar mensajes en topic_subscribe_2
+                        await process_topic_1(message)
+            
             async def handle_topic_2():
                 async for message in client.messages:
                     if message.topic == topic_subscribe_2:
-                        await handle_message(message.topic, message.payload)
-
-            # Agregar las tareas al task group
+                        await process_topic_2(message)
+            
+            # Crear corrutinas específicas para manejar cada tópico
             tg.create_task(handle_topic_1())
             tg.create_task(handle_topic_2())
 
-if __name__ == "__main__":
+            # Corrutina para publicar el estado del contador
+            tg.create_task(counter_publisher(topic_publish, client), name='counter_publisher')
+
+            # Corrutina para incrementar el contador
+            tg.create_task(counter_incrementer(), name='counter_incrementer')
+
+if __name__ == "main":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

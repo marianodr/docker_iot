@@ -1,4 +1,4 @@
-docker compose up teservices:
+services:
   mariadb:
     image: mariadb
     container_name: mariadb

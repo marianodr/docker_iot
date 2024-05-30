@@ -1,6 +1,7 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 import asyncio, ssl, logging, os, aiomqtt, json, traceback
+from typing import Union
 
 token = os.environ["TB_TOKEN"]
 STICKER_START = "CAACAgIAAxkBAAIB42ZX2Ri2wmFd0430YZNXSnCOKf6rAAK6DwACAsSYSq3W9HdybYh3NQQ"
@@ -33,13 +34,7 @@ async def acercade(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def destello(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(context.args)
     await context.bot.send_message(update.message.chat.id, text="✨ Destellando...")
-    
-    topic='destello'
-    data = {"destello": 1}
-    # Convertir el diccionario a JSON
-    json_data = json.dumps(data)
-
-    await publicar(topic, json_data)
+    await publish_value(topic='destello', value=1)
 
 async def setpoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(context.args)
@@ -47,13 +42,7 @@ async def setpoint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             setpoint_value = int(context.args[0][1:])
             await context.bot.send_message(update.message.chat.id, text=f"Setpoint establecido a {setpoint_value}")
-            
-            topic = 'setpoint'
-            data = {"setpoint": setpoint_value}
-            # Convertir el diccionario a JSON
-            json_data = json.dumps(data)
-
-            await publicar(topic, json_data)
+            await publish_value(topic='setpoint', value=setpoint_value)
         except ValueError:
             await context.bot.send_message(update.message.chat.id, text="Error: El setpoint debe ser un número entero.")
             await context.bot.send_animation(update.message.chat.id, STICKER_ERROR)
@@ -67,19 +56,13 @@ async def periodo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             periodo_value = int(context.args[0][1:])
             await context.bot.send_message(update.message.chat.id, text=f"Periodo establecido a {periodo_value} segundos")
-            
-            topic = 'periodo'
-            data = {"periodo": periodo_value}
-            json_data = json.dumps(data)
-
-            await publicar(topic, json_data)
+            await publish_value(topic='periodo', value=periodo_value)
         except ValueError:
             await context.bot.send_message(update.message.chat.id, text="Error: El periodo debe ser un número entero.")
             await context.bot.send_animation(update.message.chat.id, STICKER_ERROR)
     else:
         await context.bot.send_message(update.message.chat.id, text="Error: Debe proporcionar un valor para el periodo usando el formato @<número>.")
         await context.bot.send_animation(update.message.chat.id, STICKER_ERROR)
-
 
 async def modo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(context.args)
@@ -90,24 +73,11 @@ async def modo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def modo_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(update.message.chat.id, text="Modo manual seleccionado")
-    
-    topic='modo'
-    data = {"modo": "manual"}
-    # Convertir el diccionario a JSON
-    json_data = json.dumps(data)
-
-    await publicar(topic, json_data)
-
+    await publish_value(topic='modo', value='manual')
 
 async def modo_automatico(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(update.message.chat.id, text="Modo automático seleccionado")
-    
-    topic='modo'
-    data = {"modo": "automatico"}
-    # Convertir el diccionario a JSON
-    json_data = json.dumps(data)
-
-    await publicar(topic, json_data)
+    await publish_value(topic='modo', value='automatico')
 
 async def rele(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logging.info(context.args)
@@ -118,23 +88,11 @@ async def rele(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def rele_on(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(update.message.chat.id, text="Rele encendido")
-    
-    topic='rele'
-    data = {"rele": 1}
-    # Convertir el diccionario a JSON
-    json_data = json.dumps(data)
-
-    await publicar(topic, json_data)
+    await publish_value(topic='rele', value=1)
 
 async def rele_off(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(update.message.chat.id, text="Rele apagado")
-    
-    topic='rele'
-    data = {"rele": 0}
-    # Convertir el diccionario a JSON
-    json_data = json.dumps(data)
-
-    await publicar(topic, json_data)
+    await publish_value(topic='rele', value=0)
 
 async def volver(update: Update, context: ContextTypes.DEFAULT_TYPE):
     kb = [["destello"], ["modo"], ["rele"]]
@@ -142,7 +100,20 @@ async def volver(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                    text="Volviendo al menú principal",
                                    reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True))
 
-async def publicar(topic, dato):
+async def publish_value(topic : str, value: Union[str, int]):
+    '''
+    Envía un valor a un topic MQTT específico.
+    ---------------------------------------
+    Arguments:
+        topic (str): El topic MQTT al que se enviará el valor.
+        value (str, int): El valor a enviar al topic MQTT.
+    ---------------------------------------
+    Return:
+        None
+    '''
+    data = {topic: value}
+    # Convertir el diccionario a JSON
+    json_data = json.dumps(data)
 
     tls_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     tls_context.verify_mode = ssl.CERT_REQUIRED
@@ -157,11 +128,12 @@ async def publicar(topic, dato):
             port=int(os.environ["PUERTO_MQTTS"]),
             tls_context=tls_context
         ) as client:
-            await client.publish(f'iot2024/mdr/{topic}', dato, qos=1)
-        return True
+            await client.publish(f'iot2024/mdr/{topic}', json_data, qos=1)
+        #return True
     except ConnectionError as e:
         logging.info(e)
-        return False
+        #return False
+
 
 def main():
     application = Application.builder().token(token).build()
